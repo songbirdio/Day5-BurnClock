@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#052e1c">
+  <title>BurnClock: when will your credit run out?</title>
+
+  <!-- =====================================================
+       CSS: how the page LOOKS
+       Palette: dark green + light green (mint / lime glow)
+       Layout idea: ONE job per screen, a bottom menu to move around
+       ===================================================== -->
+  <style>
+    :root {
+      --g950: #031a10; --g900: #052e1c; --g800: #0b4a2f; --g700: #14653f;
+      --mint: #bbf7d0; --lime: #86efac; --lime2: #4ade80;
+      --text: #ecfdf5;
+      --muted: rgba(236, 253, 245, 0.68);
+      --faint: rgba(236, 253, 245, 0.42);
+      --line: rgba(187, 247, 208, 0.2);
+      --warn: #fbbf24;
+    }
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { background: var(--g950); scroll-behavior: smooth; }
+    body {
+      margin: 0; min-height: 100vh;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px; letter-spacing: 0.01em; color: var(--text);
+      background: linear-gradient(170deg, #031a10 0%, #052e1c 55%, #0a3d27 100%);
+      padding-bottom: 130px; -webkit-font-smoothing: antialiased;
+    }
+    body::before, body::after { content: ""; position: fixed; border-radius: 50%; filter: blur(90px); z-index: -1; pointer-events: none; }
+    body::before { width: 320px; height: 320px; background: #22c55e; opacity: 0.28; top: -90px; right: -80px; }
+    body::after  { width: 300px; height: 300px; background: #14b8a6; opacity: 0.22; bottom: 60px; left: -90px; }
+    .wrap { max-width: 520px; margin: 0 auto; padding: 0 20px; }
+
+    /* ---------- Glass ---------- */
+    .glass {
+      background: linear-gradient(145deg, rgba(187, 247, 208, 0.13), rgba(187, 247, 208, 0.04));
+      border: 1px solid var(--line); border-radius: 26px;
+      -webkit-backdrop-filter: blur(18px) saturate(140%); backdrop-filter: blur(18px) saturate(140%);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 18px 40px rgba(0, 0, 0, 0.35);
+    }
+
+    /* ---------- Header ---------- */
+    header { padding: 26px 0 6px; display: flex; align-items: center; gap: 12px; }
+    h1 { margin: 0; font-size: 21px; font-weight: 300; letter-spacing: 0.04em; }
+    h1 b { font-weight: 600; color: var(--lime); }
+
+    /* ---------- Screens ---------- */
+    .view[hidden] { display: none; }
+    .view > * + * { margin-top: 18px; }
+    .page-title { margin: 14px 0 0; font-size: 22px; font-weight: 300; letter-spacing: 0.02em; }
+    .page-sub { margin: 4px 0 0; color: var(--muted); font-size: 14px; line-height: 1.5; }
+    .view > .page-title + .page-sub { margin-top: 4px; }
+    .label { font-size: 12px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+    /* ---------- Icon badge ---------- */
+    .badge {
+      width: 32px; height: 32px; flex: none; border-radius: 50%;
+      display: grid; place-items: center; font-size: 15px; line-height: 1;
+      background: rgba(187, 247, 208, 0.14); border: 1px solid rgba(187, 247, 208, 0.3);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    }
+    .badge.lg { width: 42px; height: 42px; font-size: 19px; }
+
+    /* ---------- Full-pill chips ---------- */
+    .chips { display: flex; gap: 10px; flex-wrap: wrap; padding: 2px 2px 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 9px;
+      height: 48px; padding: 0 18px 0 6px; border-radius: 999px;
+      border: 1px solid var(--line);
+      background: linear-gradient(145deg, rgba(187, 247, 208, 0.17), rgba(187, 247, 208, 0.04));
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      color: var(--text); font: inherit; font-size: 14px; font-weight: 500; cursor: pointer;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 4px 0 rgba(0, 0, 0, 0.45), 0 10px 20px rgba(0, 0, 0, 0.25);
+      transition: transform 0.12s, box-shadow 0.12s, background 0.25s, color 0.25s;
+    }
+    .chip.plain { padding: 0 20px; }
+    .chip:active { transform: translateY(3px); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 1px 0 rgba(0, 0, 0, 0.45); }
+    .chip.on {
+      color: var(--g900); border-color: rgba(255, 255, 255, 0.7);
+      background: linear-gradient(145deg, #e6fdef, var(--lime));
+      box-shadow: inset 0 1px 0 #fff, 0 4px 0 #1f8a4c, 0 0 22px rgba(74, 222, 128, 0.55), 0 10px 20px rgba(0, 0, 0, 0.3);
+    }
+    .chip.on .badge { background: rgba(5, 46, 28, 0.1); border-color: rgba(5, 46, 28, 0.2); }
+    .chip.on:active { box-shadow: inset 0 1px 0 #fff, 0 1px 0 #1f8a4c, 0 0 16px rgba(74, 222, 128, 0.55); }
+    .chips.two > .chip { flex: 1; justify-content: center; }
+
+    /* ---------- Home: the big burn clock ---------- */
+    .clock { padding: 26px 20px 22px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+    .ringwrap { position: relative; width: 210px; height: 210px; }
+    .ringwrap svg { width: 100%; height: 100%; transform: rotate(-90deg); overflow: visible; }
+    .ring-bg { fill: none; stroke: rgba(187, 247, 208, 0.13); stroke-width: 8; }
+    .ring-fg {
+      fill: none; stroke: url(#rg); stroke-width: 8; stroke-linecap: round;
+      stroke-dasharray: 289.03; stroke-dashoffset: 289.03;
+      filter: drop-shadow(0 0 8px rgba(74, 222, 128, 0.75));
+      transition: stroke-dashoffset 1.2s cubic-bezier(0.3, 0.9, 0.3, 1);
+    }
+    .ring-fg.warn { stroke: var(--warn); filter: drop-shadow(0 0 8px rgba(251, 191, 36, 0.7)); }
+    .ringtxt { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; }
+    .ringtxt b { font-size: 50px; font-weight: 200; letter-spacing: -0.03em; line-height: 1; }
+    .ringtxt small { color: var(--muted); font-size: 13px; letter-spacing: 0.14em; text-transform: uppercase; margin-top: 8px; }
+    .cline { font-size: 17px; font-weight: 500; margin-top: 18px; }
+    .csub { color: var(--muted); font-size: 14px; margin-top: 6px; }
+    .cnote { margin-top: 12px; font-size: 14px; color: var(--warn); line-height: 1.5; }
+    .clast { color: var(--faint); font-size: 13px; margin-top: 14px; }
+
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 14px; padding-bottom: 6px; }
+
+    .mini { display: block; width: 100%; padding: 16px 18px; text-align: left; color: var(--text); font: inherit; cursor: pointer; border-radius: 22px; }
+    .mini:active { transform: scale(0.99); }
+    .mrow { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 14px; }
+    .mrow span { color: var(--muted); }
+    .mrow b { font-weight: 500; }
+
+    /* ---------- Budget bars (shared) ---------- */
+    .bbar { position: relative; height: 12px; border-radius: 99px; background: rgba(187, 247, 208, 0.1); margin: 14px 0 6px; }
+    .bfill { height: 100%; border-radius: 99px; width: 0; background: linear-gradient(90deg, var(--lime2), var(--mint)); box-shadow: 0 0 14px rgba(74, 222, 128, 0.6); transition: width 0.9s cubic-bezier(0.3, 0.9, 0.3, 1), background 0.4s; }
+    .bfill.warn { background: linear-gradient(90deg, #f59e0b, var(--warn)); box-shadow: 0 0 14px rgba(251, 191, 36, 0.6); }
+    .pace { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--text); border-radius: 2px; opacity: 0.85; }
+    .pace::after { content: "today"; position: absolute; top: -17px; left: 50%; transform: translateX(-50%); font-size: 11px; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; }
+
+    /* ---------- Cards and tiles ---------- */
+    .card { padding: 20px; }
+    .card > .label { display: block; margin-bottom: 14px; }
+    .budget-row { display: flex; gap: 12px; align-items: center; }
+    .budget-text { color: var(--muted); font-size: 14px; line-height: 1.6; margin-top: 10px; }
+    .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    .tile { padding: 16px; border-radius: 22px; min-width: 0; }
+    .tile .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 14px; }
+    .tile .top .label { font-size: 11px; }
+    .tile .v { font-size: 24px; font-weight: 300; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; word-break: break-word; }
+    .tile .s { color: var(--muted); font-size: 13px; margin-top: 4px; }
+
+    /* ---------- Plan league ---------- */
+    .lrow {
+      display: grid; grid-template-columns: 34px 1fr auto; gap: 14px; align-items: center;
+      padding: 14px; margin-top: 10px; border-radius: 18px;
+      background: rgba(187, 247, 208, 0.06); border: 1px solid var(--line);
+    }
+    .lrow.first { background: linear-gradient(145deg, rgba(134, 239, 172, 0.2), rgba(134, 239, 172, 0.05)); border-color: rgba(134, 239, 172, 0.5); box-shadow: 0 0 20px rgba(74, 222, 128, 0.2); }
+    .rank { width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 14px; background: rgba(187, 247, 208, 0.12); }
+    .lrow.first .rank { background: var(--lime); color: var(--g900); }
+    .lrow .t { font-weight: 500; font-size: 15px; }
+    .lrow .d { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .lrow .val { font-weight: 600; color: var(--mint); font-variant-numeric: tabular-nums; text-align: right; font-size: 14px; }
+
+    /* ---------- Weekday strip ---------- */
+    .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
+    .wd { border-radius: 14px; padding: 12px 0 10px; text-align: center; border: 1px solid var(--line); background: rgba(134, 239, 172, var(--a, 0.06)); min-width: 0; }
+    .wd.top { border-color: var(--lime); box-shadow: 0 0 16px rgba(74, 222, 128, 0.45); }
+    .wd b { display: block; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 500; }
+    .wd span { display: block; margin-top: 8px; font-size: 12px; font-variant-numeric: tabular-nums; }
+    .wk-note { color: var(--muted); font-size: 14px; margin-top: 14px; line-height: 1.5; }
+
+    /* ---------- Log ---------- */
+    .hrow { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--line); }
+    .hrow:last-of-type { border-bottom: none; }
+    .hrow .info { flex: 1; min-width: 0; }
+    .hrow .t { font-weight: 500; font-size: 15px; }
+    .hrow .d { color: var(--muted); font-size: 13px; margin-top: 3px; }
+    .hrow .amt { font-weight: 500; font-variant-numeric: tabular-nums; }
+    .flag { display: inline-block; margin-top: 8px; padding: 5px 11px; border-radius: 99px; font-size: 12px; background: rgba(251, 191, 36, 0.14); color: var(--warn); border: 1px solid rgba(251, 191, 36, 0.35); line-height: 1.3; }
+    .x { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: rgba(187, 247, 208, 0.06); color: var(--muted); font-size: 14px; cursor: pointer; transition: transform 0.12s, background 0.2s, color 0.2s; }
+    .x:hover { background: var(--lime); color: var(--g900); }
+    .x:active { transform: scale(0.88); }
+    .empty { text-align: center; color: var(--muted); padding: 26px 10px; line-height: 1.7; font-size: 15px; }
+    .empty .big { font-size: 38px; display: block; margin-bottom: 8px; }
+
+    /* ---------- Tactile 3D push buttons ---------- */
+    .push {
+      display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+      height: 54px; padding: 0 22px 0 9px; border-radius: 999px;
+      border: 1px solid rgba(255, 255, 255, 0.7);
+      background: linear-gradient(145deg, #e6fdef, var(--lime));
+      color: var(--g900); font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+      box-shadow: inset 0 1px 0 #fff, 0 5px 0 #1f8a4c, 0 0 24px rgba(74, 222, 128, 0.45), 0 12px 22px rgba(0, 0, 0, 0.4);
+      transition: transform 0.12s, box-shadow 0.12s;
+    }
+    .push .badge { width: 36px; height: 36px; background: rgba(5, 46, 28, 0.1); border-color: rgba(5, 46, 28, 0.2); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7); }
+    .push:active { transform: translateY(4px); box-shadow: inset 0 1px 0 #fff, 0 1px 0 #1f8a4c, 0 0 16px rgba(74, 222, 128, 0.45); }
+    .push.dark {
+      color: var(--text); border-color: var(--line);
+      background: linear-gradient(145deg, rgba(187, 247, 208, 0.18), rgba(187, 247, 208, 0.04));
+      -webkit-backdrop-filter: blur(14px); backdrop-filter: blur(14px);
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 5px 0 rgba(0, 0, 0, 0.5), 0 12px 22px rgba(0, 0, 0, 0.3);
+    }
+    .push.dark .badge { background: rgba(187, 247, 208, 0.14); border-color: rgba(187, 247, 208, 0.28); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25); }
+    .push.dark:active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2), 0 1px 0 rgba(0, 0, 0, 0.5); }
+    .push.block { width: 100%; }
+    .push.sm { height: 46px; font-size: 14px; padding: 0 20px 0 7px; }
+    .push.sm .badge { width: 32px; height: 32px; }
+    .row { display: flex; gap: 14px; flex-wrap: wrap; padding-bottom: 6px; }
+
+    footer { text-align: center; color: var(--faint); font-size: 12px; margin: 30px 0 10px; line-height: 1.7; }
+
+    /* ---------- Bottom menu ---------- */
+    .tabbar {
+      position: fixed; left: 50%; transform: translateX(-50%);
+      bottom: calc(14px + env(safe-area-inset-bottom)); z-index: 15;
+      width: min(480px, calc(100% - 28px)); padding: 8px;
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; border-radius: 999px;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 16px 40px rgba(0, 0, 0, 0.5);
+    }
+    .tab {
+      display: flex; flex-direction: column; align-items: center; gap: 3px;
+      padding: 9px 0 7px; border: none; border-radius: 999px; background: none;
+      color: var(--muted); font: inherit; font-size: 12px; font-weight: 500; cursor: pointer;
+      transition: transform 0.12s, background 0.25s, color 0.25s, box-shadow 0.12s;
+    }
+    .tab .ico { font-size: 20px; line-height: 1; }
+    .tab:active { transform: translateY(2px); }
+    .tab.on { color: var(--g900); background: linear-gradient(145deg, #e6fdef, var(--lime)); box-shadow: inset 0 1px 0 #fff, 0 3px 0 #1f8a4c, 0 0 18px rgba(74, 222, 128, 0.5); }
+
+    /* ---------- Dialogs (forms) ---------- */
+    dialog { border: none; padding: 0; background: transparent; color: var(--text); width: 100%; max-width: 560px; margin: auto auto 0; max-height: 94vh; overflow: visible; }
+    dialog::backdrop { background: rgba(2, 16, 9, 0.7); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
+    dialog[open] { animation: slideUp 0.35s cubic-bezier(0.2, 0.9, 0.3, 1); }
+    dialog[open]::backdrop { animation: fade 0.3s; }
+    .sheet {
+      max-height: 92vh; overflow-y: auto; padding: 12px 22px calc(24px + env(safe-area-inset-bottom));
+      border-radius: 30px 30px 0 0;
+      background: linear-gradient(160deg, rgba(11, 74, 47, 0.94), rgba(3, 26, 16, 0.97));
+      -webkit-backdrop-filter: blur(26px) saturate(150%); backdrop-filter: blur(26px) saturate(150%);
+      border: 1px solid var(--line); border-bottom: none;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.12), 0 -20px 50px rgba(0, 0, 0, 0.5);
+    }
+    .grab { width: 44px; height: 5px; background: var(--line); border-radius: 9px; margin: 0 auto 16px; }
+    .sheet h2 { margin: 0 0 4px; font-size: 20px; font-weight: 300; letter-spacing: 0.02em; }
+    .step { font-size: 14px; font-weight: 500; color: var(--mint); margin: 20px 0 10px; }
+    label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 8px; font-weight: 500; }
+    .field {
+      width: 100%; height: 54px; padding: 0 16px; border-radius: 16px;
+      border: 1px solid var(--line); background: rgba(187, 247, 208, 0.08); color: var(--text);
+      font: inherit; font-size: 17px; color-scheme: dark;
+    }
+    .field::placeholder { color: var(--faint); }
+    .field:focus { outline: none; border-color: var(--lime); box-shadow: 0 0 0 3px rgba(134, 239, 172, 0.25); }
+    .field.bad { border-color: #fb7185; animation: shake 0.35s; }
+    .hint { margin-top: 12px; min-height: 18px; color: var(--lime); font-size: 14px; }
+    .small-hint { color: var(--muted); font-size: 14px; line-height: 1.6; margin-top: 14px; }
+    .submit { width: 100%; margin-top: 18px; height: 58px; }
+    .more { margin-top: 14px; border-radius: 18px; border: 1px solid var(--line); background: rgba(187, 247, 208, 0.05); }
+    .more summary { padding: 15px 16px; cursor: pointer; font-size: 14px; color: var(--muted); list-style: none; display: flex; justify-content: space-between; align-items: center; }
+    .more summary::-webkit-details-marker { display: none; }
+    .more summary::after { content: "＋"; color: var(--lime); font-size: 18px; }
+    .more[open] summary::after { content: "−"; }
+    .more .inner { padding: 0 16px 16px; }
+    .hide { display: none !important; }
+
+    /* ---------- Toast ---------- */
+    .toast {
+      position: fixed; left: 50%; top: 18px; z-index: 1000; transform: translate(-50%, -90px);
+      display: flex; align-items: center; gap: 14px; padding: 13px 20px; border-radius: 999px;
+      background: rgba(236, 253, 245, 0.96); color: var(--g900); font-size: 14px; font-weight: 500;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.45);
+      transition: transform 0.3s cubic-bezier(0.2, 1.3, 0.4, 1); max-width: 92vw;
+    }
+    .toast.show { transform: translate(-50%, 0); }
+    .toast button { border: none; background: none; color: #15803d; font: inherit; font-weight: 700; cursor: pointer; }
+
+    @keyframes slideUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+    @keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes shake { 25% { transform: translateX(-5px); } 75% { transform: translateX(5px); } }
+
+    /* View Transitions: list items glide to their new place */
+    ::view-transition-group(*) { animation-duration: 0.5s; animation-timing-function: cubic-bezier(0.2, 0.9, 0.3, 1); }
+    ::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.22s; }
+
+    @media (max-width: 380px) {
+      .ringwrap { width: 180px; height: 180px; } .ringtxt b { font-size: 42px; }
+      .actions { grid-template-columns: 1fr; }
+    }
+    @media (prefers-reduced-motion: reduce) { * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
+  </style>
+</head>
+
+<body>
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <linearGradient id="rg" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0%" stop-color="#4ade80"/><stop offset="100%" stop-color="#bbf7d0"/>
+      </linearGradient>
+    </defs>
+  </svg>
+
+  <!-- =====================================================
+       HTML: the STRUCTURE of the page
+       Four screens. Only one shows at a time.
+       ===================================================== -->
+  <div class="wrap">
+    <header>
+      <div class="badge lg">⏳</div>
+      <h1>Burn<b>Clock</b></h1>
+    </header>
+
+    <!-- SCREEN 1: HOME -->
+    <section class="view" id="v-home">
+      <div class="chips two" id="walletChips">
+        <button class="chip on" type="button" data-w="airtime"><span class="badge">📞</span>Airtime</button>
+        <button class="chip" type="button" data-w="data"><span class="badge">📶</span>Data</button>
+      </div>
+      <div class="glass clock" id="clock"></div>
+      <div class="actions">
+        <button class="push" id="btnRecharge" type="button"><span class="badge">＋</span>Recharge</button>
+        <button class="push dark" id="btnCheck" type="button"><span class="badge">🔎</span>Check balance</button>
+      </div>
+      <div id="homeExtra"></div>
+      <button class="glass mini" id="miniBudget" type="button"></button>
+    </section>
+
+    <!-- SCREEN 2: MONEY -->
+    <section class="view" id="v-money" hidden>
+      <div>
+        <h2 class="page-title">Money</h2>
+        <p class="page-sub">What you spend, and whether you are on budget.</p>
+      </div>
+      <div class="glass card">
+        <span class="label">Monthly budget</span>
+        <div class="budget-row">
+          <input class="field" id="budgetIn" type="number" inputmode="decimal" min="0" step="any" placeholder="e.g. 10000">
+          <button class="push sm" id="budgetSave" type="button"><span class="badge">✓</span>Set</button>
+        </div>
+        <div class="bbar" style="margin-top:26px"><div class="bfill" id="budgetFill"></div><div class="pace" id="pace"></div></div>
+        <div class="budget-text" id="budgetText"></div>
+      </div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <!-- SCREEN 3: PLANS -->
+    <section class="view" id="v-plans" hidden>
+      <div>
+        <h2 class="page-title">Plans</h2>
+        <p class="page-sub">Which top-ups gave you the best value, and when you usually top up.</p>
+      </div>
+      <div class="glass card">
+        <span class="label">Plan league</span>
+        <div class="chips" id="leagueChips">
+          <button class="chip plain on" type="button" data-m="perGB">₦ per GB</button>
+          <button class="chip plain" type="button" data-m="perDay">₦ per day</button>
+          <button class="chip plain" type="button" data-m="big">Biggest</button>
+        </div>
+        <div id="league"></div>
+      </div>
+      <div class="glass card">
+        <span class="label">Your top-up days</span>
+        <div class="week" id="week"></div>
+        <div class="wk-note" id="weekNote"></div>
+      </div>
+    </section>
+
+    <!-- SCREEN 4: LOG -->
+    <section class="view" id="v-log" hidden>
+      <div>
+        <h2 class="page-title">Your log</h2>
+        <p class="page-sub">Every recharge and balance check you have saved.</p>
+      </div>
+      <div class="chips" id="logChips">
+        <button class="chip plain on" type="button" data-f="all">All</button>
+        <button class="chip plain" type="button" data-f="airtime">Airtime</button>
+        <button class="chip plain" type="button" data-f="data">Data</button>
+      </div>
+      <div class="glass card" id="logCard"><div id="log"></div></div>
+      <div class="row" id="logActions"></div>
+    </section>
+
+    <footer>Saved on this phone only.<br>Forecasts are estimates from what you log: the more you log, the better they get.</footer>
+  </div>
+
+  <!-- Bottom menu -->
+  <nav class="glass tabbar" id="tabbar">
+    <button class="tab on" type="button" data-tab="home"><span class="ico">⏳</span>Home</button>
+    <button class="tab" type="button" data-tab="money"><span class="ico">💰</span>Money</button>
+    <button class="tab" type="button" data-tab="plans"><span class="ico">🏆</span>Plans</button>
+    <button class="tab" type="button" data-tab="log"><span class="ico">🧾</span>Log</button>
+  </nav>
+
+  <!-- Dialog 1: log a recharge (simple steps, extras tucked away) -->
+  <dialog id="dlgRecharge">
+    <form class="sheet" id="formRecharge" autocomplete="off">
+      <div class="grab"></div>
+      <h2>Log a recharge</h2>
+
+      <div class="step">1 · What did you buy?</div>
+      <div class="chips two" id="typeChips">
+        <button class="chip on" type="button" data-t="airtime"><span class="badge">📞</span>Airtime</button>
+        <button class="chip" type="button" data-t="data"><span class="badge">📶</span>Data</button>
+      </div>
+
+      <div class="step">2 · Which network?</div>
+      <div class="chips" id="netChips"></div>
+
+      <div class="step">3 · How much did you pay?</div>
+      <div class="chips" id="costChips"></div>
+      <input class="field" id="fCost" type="number" inputmode="decimal" min="0" step="any" placeholder="Or type the amount in ₦">
+
+      <div id="sizeBlock" class="hide">
+        <div class="step">4 · How big is the data plan?</div>
+        <div class="chips" id="sizeChips"></div>
+        <input class="field" id="fSize" type="number" inputmode="decimal" min="0" step="any" placeholder="Or type the size in GB (500MB = 0.5)">
+      </div>
+      <div class="hint" id="hintR"></div>
+
+      <details class="more">
+        <summary>More details (date, validity, note)</summary>
+        <div class="inner">
+          <label for="fDate">Date</label>
+          <input class="field" id="fDate" type="date">
+          <div id="validWrap" class="hide">
+            <label for="fValid">How many days is the plan valid for?</label>
+            <input class="field" id="fValid" type="number" inputmode="numeric" min="0" step="1" placeholder="e.g. 30">
+          </div>
+          <label for="fNote">Note</label>
+          <input class="field" id="fNote" maxlength="40" placeholder="e.g. night plan">
+        </div>
+      </details>
+
+      <button class="push submit" type="submit"><span class="badge">✓</span>Save recharge</button>
+    </form>
+  </dialog>
+
+  <!-- Dialog 2: balance check-in -->
+  <dialog id="dlgCheck">
+    <form class="sheet" id="formCheck" autocomplete="off">
+      <div class="grab"></div>
+      <h2>Check balance</h2>
+      <div class="step">1 · Which one?</div>
+      <div class="chips two" id="checkChips">
+        <button class="chip on" type="button" data-t="airtime"><span class="badge">📞</span>Airtime</button>
+        <button class="chip" type="button" data-t="data"><span class="badge">📶</span>Data</button>
+      </div>
+      <div class="step" id="balLabel">2 · How much airtime is left? (₦)</div>
+      <input class="field" id="fBal" type="number" inputmode="decimal" min="0" step="any" placeholder="0">
+      <div class="small-hint">Check your balance with your network's usual code or app, then type it here. BurnClock uses it to measure how fast you really burn credit.</div>
+      <details class="more">
+        <summary>More details (date)</summary>
+        <div class="inner"><label for="fCDate">Date</label><input class="field" id="fCDate" type="date"></div>
+      </details>
+      <button class="push submit" type="submit"><span class="badge">✓</span>Save check</button>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast"></div>
+
+  <!-- =====================================================
+       JavaScript: the BRAIN of the app
+       Look for the "MODERN JS" labels. They mark newer features.
+       ===================================================== -->
+  <script>
+    "use strict";
+
+    // ---------- 1. Small modern helpers ----------
+    // MODERN JS: "??=" means "if this is empty, fill it".
+    Array.prototype.toSorted ??= function (compare) { return [...this].sort(compare); };
+
+    // MODERN JS: Object.groupBy sorts a list into groups (with a safe fallback).
+    const groupBy = (list, getKey) =>
+      Object.groupBy ? Object.groupBy(list, getKey)
+        : list.reduce((groups, item) => { (groups[getKey(item)] ??= []).push(item); return groups; }, {});
+
+    const $ = (id) => document.getElementById(id);
+    const sum = (list, pick = (x) => x) => list.reduce((total, x) => total + pick(x), 0);
+    const clamp = (n, lo, hi) => Math.min(hi, Math.max(lo, n));
+    const uid = () => "i" + (crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2, 7));
+
+    // MODERN JS: Intl formatters turn raw numbers and dates into friendly text
+    const nf = new Intl.NumberFormat("en-NG", { maximumFractionDigits: 0 });
+    const nf1 = new Intl.NumberFormat("en-NG", { maximumFractionDigits: 1 });
+    const naira = (n) => "₦" + nf.format(n);
+    const dShort = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short" });
+    const dDay = new Intl.DateTimeFormat("en-GB", { weekday: "short", day: "numeric", month: "short" });
+
+    // ---------- 2. Dates ----------
+    const toISO = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    const parse = (iso) => { const [y, m, d] = iso.split("-").map(Number); return new Date(y, m - 1, d); };
+    const addDays = (iso, n) => { const d = parse(iso); d.setDate(d.getDate() + n); return toISO(d); };
+    const daysBetween = (a, b) => Math.round((parse(b) - parse(a)) / 86400000);
+    const today = () => toISO(new Date());
+    const dateFromToday = (n) => { const d = new Date(); d.setHours(12, 0, 0, 0); d.setDate(d.getDate() + Math.round(n)); return d; };
+
+    // ---------- 3. Data and saving ----------
+    // store.recharges: { id, type: "airtime"|"data", network, cost, value, validity, date, note, ts }
+    //   (value = ₦ for airtime, GB for data)
+    // store.checkins : { id, type, balance, date, ts }
+    const KEY = "burnclock_v1";
+    const store = { recharges: [], checkins: [], budget: 0 };
+    const ui = { tab: "home", wallet: "airtime", league: "perGB", logFilter: "all", logCount: 8, rType: "airtime", rNet: "MTN", cType: "airtime" };
+    let lastDeleted = null;
+
+    const NETWORKS = [
+      { name: "MTN", dot: "🟡" }, { name: "Airtel", dot: "🔴" },
+      { name: "Glo", dot: "🟢" }, { name: "9mobile", dot: "⚪" }
+    ];
+    const netDot = (name) => NETWORKS.find((n) => n.name === name)?.dot ?? "📡";
+
+    function load() {
+      try { Object.assign(store, JSON.parse(localStorage.getItem(KEY) ?? "{}")); } catch { /* start fresh */ }
+    }
+    function save() {
+      try { localStorage.setItem(KEY, JSON.stringify(store)); } catch { toast("Could not save on this device"); }
+    }
+
+    // ---------- 4. Smooth transitions ----------
+    // MODERN JS: the View Transitions API. The browser photographs the page before and
+    // after a change, then slides every element that has a view-transition-name.
+    function withTransition(change) {
+      const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (!document.startViewTransition || reduce) return change();
+      document.startViewTransition(change);
+    }
+
+    // MODERN JS: the Web Animations API. element.animate() makes a quick animation in code.
+    function staggerIn(selector) {
+      document.querySelectorAll(selector).forEach((el, i) => {
+        el.animate(
+          [{ opacity: 0, transform: "translateY(16px) scale(0.98)" }, { opacity: 1, transform: "none" }],
+          { duration: 480, delay: i * 60, easing: "cubic-bezier(.2,.9,.3,1)", fill: "backwards" }
+        );
+      });
+    }
+
+    let toastTimer;
+    function toast(message, actionLabel, action) {
+      const t = $("toast");
+      t.replaceChildren(Object.assign(document.createElement("span"), { textContent: message }));
+      if (actionLabel) {
+        const b = Object.assign(document.createElement("button"), { textContent: actionLabel });
+        b.onclick = () => { action(); t.classList.remove("show"); };
+        t.append(b);
+      }
+      t.classList.add("show");
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => t.classList.remove("show"), 4200);
+    }
+    const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+    // ---------- 5. Moving between screens ----------
+    function showView(name) {
+      ui.tab = name;
+      document.querySelectorAll(".view").forEach((v) => { v.hidden = v.id !== "v-" + name; });
+      document.querySelectorAll(".tab").forEach((t) => t.classList.toggle("on", t.dataset.tab === name));
+      window.scrollTo({ top: 0 });
+      staggerIn(`#v-${name} > *`);
+    }
+    $("tabbar").addEventListener("click", (e) => {
+      const b = e.target.closest(".tab");
+      if (b && b.dataset.tab !== ui.tab) showView(b.dataset.tab);
+    });
+
+    // ---------- 6. The brain: working out the forecast ----------
+    const byDate = (a, b) => a.date.localeCompare(b.date) || a.ts - b.ts;
+
+    // For each recharge: how many days did it last? (gap until the next one of the same type)
+    function lastedMap() {
+      const map = new Map();
+      for (const list of Object.values(groupBy(store.recharges, (r) => r.type))) {
+        const sorted = list.toSorted(byDate);
+        sorted.forEach((r, i) => {
+          const next = sorted[i + 1];
+          if (next) { const gap = daysBetween(r.date, next.date); if (gap > 0) map.set(r.id, gap); }
+        });
+      }
+      return map;
+    }
+
+    // Everything we know about one wallet (airtime or data)
+    function walletStats(type) {
+      const list = store.recharges.filter((r) => r.type === type).toSorted(byDate);
+      if (!list.length) return null;
+
+      const last = list.at(-1);
+      const gaps = list.slice(1).map((r, i) => daysBetween(list[i].date, r.date)).filter((g) => g > 0);
+      const avg = gaps.length ? sum(gaps) / gaps.length : null;
+      const baseLast = daysBetween(today(), last.date);
+
+      const check = store.checkins.filter((c) => c.type === type && c.date >= last.date).toSorted(byDate).at(-1) ?? null;
+
+      let burn = null, method = null, center = null, low = null, high = null;
+      if (check) {
+        const days = daysBetween(last.date, check.date);
+        const used = last.value - check.balance;
+        if (days >= 1 && used > 0) {
+          burn = used / days;
+          const runway = check.balance / burn;
+          const baseCheck = daysBetween(today(), check.date);
+          center = baseCheck + runway; low = baseCheck + runway * 0.8; high = baseCheck + runway * 1.2;
+          method = "check";
+        }
+      }
+      if (center === null && avg !== null) {
+        center = baseLast + avg; low = baseLast + Math.min(...gaps); high = baseLast + Math.max(...gaps);
+        method = "history";
+      }
+
+      const expiry = type === "data" && last.validity > 0 ? baseLast + last.validity : null;
+      let lose = 0;
+      if (method === "check" && expiry !== null && expiry < center) {
+        lose = Math.max(0, check.balance - burn * (expiry - daysBetween(today(), check.date)));
+      }
+
+      const span = center !== null ? center - baseLast : 0;
+      const frac = center === null ? 0 : center <= 0 ? 0 : span > 0 ? clamp(center / span, 0, 1) : 0;
+      return { type, list, last, avg, check, burn, method, center, low, high, expiry, lose, frac };
+    }
+
+    function budgetInfo() {
+      const now = new Date(), ym = toISO(now).slice(0, 7);
+      const spent = sum(store.recharges.filter((r) => r.date.startsWith(ym)), (r) => r.cost);
+      const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+      const monthFrac = now.getDate() / daysInMonth;
+      return { spent, monthFrac, budget: Number(store.budget) || 0, projected: spent / monthFrac };
+    }
+
+    // ---------- 7. Draw each screen ----------
+    const TYPE_INFO = {
+      airtime: { icon: "📞", name: "Airtime", unit: (n) => naira(n) },
+      data: { icon: "📶", name: "Data", unit: (n) => nf1.format(n) + " GB" }
+    };
+
+    function render() {
+      renderHome();
+      renderBudget();
+      renderTiles();
+      renderLeague();
+      renderWeek();
+      renderLog();
+      save();
+    }
+
+    // HOME: one big clock for the wallet you picked
+    function renderHome() {
+      const type = ui.wallet, info = TYPE_INFO[type], s = walletStats(type);
+      document.querySelectorAll("#walletChips .chip").forEach((c) => c.classList.toggle("on", c.dataset.w === type));
+
+      let big = "—", small = "no data", line = "No recharge yet", sub = "Tap Recharge to start your clock.", note = "", last = "", warn = false, frac = 0;
+      if (s) {
+        last = `Last: ${netDot(s.last.network)} ${s.last.network} · ${info.unit(s.last.value)} · ${dShort.format(parse(s.last.date))}`;
+        if (s.center === null) {
+          line = "Need one more clue"; sub = "Log another recharge, or tap Check balance.";
+        } else {
+          frac = s.frac;
+          if (s.center <= 0) { big = "Now"; small = "probably out"; warn = true; line = "Likely already empty"; }
+          else {
+            big = Math.round(s.center) < 1 ? "<1d" : Math.round(s.center) + "d"; small = "left";
+            const a = dDay.format(dateFromToday(s.low)), b = dDay.format(dateFromToday(s.high));
+            line = a === b ? "Out around " + a : `Out ${a} to ${b}`;
+            if (s.center < 2) warn = true;
+          }
+          sub = s.method === "check" ? "From your balance check" : "From your recharge history";
+        }
+        if (s.expiry !== null) {
+          note = s.expiry < 0 ? "⌛ This plan has expired." : `⌛ Plan expires in ${Math.round(s.expiry)} day${Math.round(s.expiry) === 1 ? "" : "s"}.`;
+          if (s.lose > 0.05) note += ` You may lose about ${nf1.format(s.lose)} GB unused.`;
+        }
+      }
+
+      $("clock").innerHTML = `
+        <div class="ringwrap">
+          <svg viewBox="0 0 110 110" aria-hidden="true">
+            <circle class="ring-bg" cx="55" cy="55" r="46"/>
+            <circle class="ring-fg ${warn ? "warn" : ""}" cx="55" cy="55" r="46" data-offset="${289.03 * (1 - frac)}"/>
+          </svg>
+          <div class="ringtxt"><b>${big}</b><small>${small}</small></div>
+        </div>
+        <div class="cline">${line}</div>
+        <div class="csub">${sub}</div>
+        ${note ? `<div class="cnote">${note}</div>` : ""}
+        ${last ? `<div class="clast">${last}</div>` : ""}`;
+
+      // Fill the ring on the next frame so the CSS transition can animate it
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        document.querySelectorAll(".ring-fg").forEach((c) => { c.style.strokeDashoffset = c.dataset.offset; });
+      }));
+
+      $("homeExtra").innerHTML = store.recharges.length ? "" :
+        `<button class="push dark block" type="button" data-sample="1"><span class="badge">✨</span>Try sample data</button>`;
+
+      // Small budget summary under the buttons. Tapping it opens the Money screen.
+      const b = budgetInfo(), mini = $("miniBudget");
+      mini.innerHTML = b.budget
+        ? `<div class="mrow"><span>This month</span><b>${naira(b.spent)} of ${naira(b.budget)}</b></div>
+           <div class="bbar"><div class="bfill ${b.projected > b.budget ? "warn" : ""}" style="width:${clamp((b.spent / b.budget) * 100, 0, 100)}%"></div></div>`
+        : `<div class="mrow"><span>Monthly budget</span><b>Set one →</b></div>`;
+    }
+    $("miniBudget").addEventListener("click", () => showView("money"));
+    $("walletChips").addEventListener("click", (e) => {
+      const c = e.target.closest(".chip");
+      if (c) { ui.wallet = c.dataset.w; renderHome(); }
+    });
+
+    // MONEY
+    function renderBudget() {
+      const { spent, monthFrac, budget, projected } = budgetInfo();
+      $("budgetIn").value = budget || "";
+      $("pace").style.left = monthFrac * 100 + "%";
+      const fill = $("budgetFill");
+      if (!budget) {
+        fill.style.width = "0%"; fill.classList.remove("warn");
+        $("budgetText").textContent = `You have spent ${naira(spent)} this month. Set a budget to see if you are ahead of pace.`;
+        return;
+      }
+      fill.style.width = clamp((spent / budget) * 100, 0, 100) + "%";
+      fill.classList.toggle("warn", projected > budget);
+      $("budgetText").textContent = projected > budget
+        ? `${naira(spent)} of ${naira(budget)} spent. At this pace you will reach ${naira(projected)}, which is ${naira(projected - budget)} over budget.`
+        : `${naira(spent)} of ${naira(budget)} spent. On track: heading for about ${naira(projected)} by month end.`;
+    }
+
+    function renderTiles() {
+      const lasted = lastedMap(), lastedVals = [...lasted.values()];
+      const now = today(), since30 = addDays(now, -29);
+      const recent = store.recharges.filter((r) => r.date >= since30 && r.date <= now);
+      const dataList = store.recharges.filter((r) => r.type === "data" && r.value > 0);
+      const topNet = Object.entries(groupBy(store.recharges, (r) => r.network))
+        .map(([n, l]) => [n, sum(l, (r) => r.cost)]).toSorted((a, b) => b[1] - a[1])[0];
+
+      const tiles = [
+        { icon: "🔥", label: "Per day", v: store.recharges.length ? naira(sum(recent, (r) => r.cost) / 30) : "-", s: "Average, last 30 days" },
+        { icon: "⏱️", label: "A top-up lasts", v: lastedVals.length ? nf1.format(sum(lastedVals) / lastedVals.length) + " days" : "-", s: "On average" },
+        { icon: "📶", label: "Data price", v: dataList.length ? naira(sum(dataList, (r) => r.cost) / sum(dataList, (r) => r.value)) : "-", s: "Average per GB" },
+        { icon: "📡", label: "Top network", v: topNet ? topNet[0] : "-", s: topNet ? naira(topNet[1]) + " in total" : "No data yet" }
+      ];
+      $("tiles").innerHTML = tiles.map((t) => `
+        <div class="glass tile">
+          <div class="top"><span class="label">${t.label}</span><span class="badge">${t.icon}</span></div>
+          <div class="v">${t.v}</div><div class="s">${t.s}</div>
+        </div>`).join("");
+    }
+
+    // PLANS: the league. Changing the chip re-orders the rows with a smooth glide.
+    const METRICS = {
+      perGB:  { pick: (r) => (r.type === "data" && r.value > 0 ? r.cost / r.value : null), fmt: (v) => naira(v) + "/GB", asc: true, empty: "Log a data recharge with its size to rank plans by price per GB." },
+      perDay: { pick: (r, lasted) => (lasted.has(r.id) ? r.cost / lasted.get(r.id) : null), fmt: (v) => naira(v) + "/day", asc: true, empty: "Log at least two recharges of the same type to see how long each one lasted." },
+      big:    { pick: (r) => r.cost, fmt: (v) => naira(v), asc: false, empty: "Log a recharge to start the league." }
+    };
+
+    function renderLeague() {
+      document.querySelectorAll("#leagueChips .chip").forEach((c) => c.classList.toggle("on", c.dataset.m === ui.league));
+      const m = METRICS[ui.league], lasted = lastedMap();
+
+      // MODERN JS: chain map -> filter -> toSorted -> slice to build a ranked list
+      const rows = store.recharges
+        .map((r) => ({ r, v: m.pick(r, lasted) }))
+        .filter((x) => x.v !== null)
+        .toSorted((a, b) => (m.asc ? a.v - b.v : b.v - a.v))
+        .slice(0, 5);
+
+      $("league").innerHTML = rows.length ? rows.map(({ r, v }, i) => `
+        <div class="lrow ${i === 0 ? "first" : ""}" style="view-transition-name: lg-${r.id}">
+          <div class="rank">${i === 0 ? "🥇" : i + 1}</div>
+          <div><div class="t">${netDot(r.network)} ${esc(r.network)} · ${TYPE_INFO[r.type].unit(r.value)}</div>
+               <div class="d">${naira(r.cost)} · ${dShort.format(parse(r.date))}${lasted.has(r.id) ? ` · lasted ${lasted.get(r.id)}d` : ""}</div></div>
+          <div class="val">${m.fmt(v)}</div>
+        </div>`).join("") : `<div class="empty">${m.empty}</div>`;
+    }
+
+    function renderWeek() {
+      const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+      const full = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"];
+      const groups = groupBy(store.recharges, (r) => (parse(r.date).getDay() + 6) % 7);
+      const totals = names.map((_, i) => sum(groups[i] ?? [], (r) => r.cost));
+      const max = Math.max(...totals), total = sum(totals);
+
+      $("week").innerHTML = names.map((n, i) => `
+        <div class="wd ${max > 0 && totals[i] === max ? "top" : ""}" style="--a:${max ? 0.06 + 0.5 * (totals[i] / max) : 0.06}">
+          <b>${n}</b><span>${totals[i] ? (totals[i] >= 1000 ? nf1.format(totals[i] / 1000) + "k" : totals[i]) : "·"}</span>
+        </div>`).join("");
+
+      $("weekNote").textContent = total
+        ? `You spend the most on ${full[totals.indexOf(max)]}: ${Math.round((max / total) * 100)}% of everything you have topped up.`
+        : "Your busiest top-up days will show up here.";
+    }
+
+    // LOG
+    function renderLog() {
+      document.querySelectorAll("#logChips .chip").forEach((c) => c.classList.toggle("on", c.dataset.f === ui.logFilter));
+      const lasted = lastedMap(), medians = {};
+      for (const [type, list] of Object.entries(groupBy(store.recharges, (r) => r.type))) {
+        const vals = list.map((r) => lasted.get(r.id)).filter(Boolean).toSorted((a, b) => a - b);
+        if (vals.length >= 3) medians[type] = vals[Math.floor(vals.length / 2)];
+      }
+
+      const items = [
+        ...store.recharges.map((r) => ({ kind: "r", ...r })),
+        ...store.checkins.map((c) => ({ kind: "c", ...c }))
+      ].filter((e) => ui.logFilter === "all" || e.type === ui.logFilter)
+       .toSorted((a, b) => b.date.localeCompare(a.date) || b.ts - a.ts);
+
+      if (!items.length) {
+        $("log").innerHTML = `<div class="empty"><span class="big">🌱</span>Nothing here yet.<br>Go to Home and tap <b>Recharge</b> after your next top-up.</div>`;
+      } else {
+        $("log").innerHTML = items.slice(0, ui.logCount).map((e) => {
+          if (e.kind === "c") {
+            return `<div class="hrow" style="view-transition-name: log-${e.id}"><span class="badge lg">🔎</span>
+              <div class="info"><div class="t">Balance check · ${TYPE_INFO[e.type].unit(e.balance)} left</div><div class="d">${dShort.format(parse(e.date))}</div></div>
+              <button class="x" data-del="${e.id}" data-kind="c" aria-label="Delete">✕</button></div>`;
+          }
+          const L = lasted.get(e.id), med = medians[e.type], fast = L && med && L <= med * 0.6;
+          const bits = [dShort.format(parse(e.date))];
+          if (e.type === "data" && e.validity) bits.push(e.validity + "-day plan");
+          if (L) bits.push("lasted " + L + "d");
+          if (e.note) bits.push(esc(e.note));
+          return `<div class="hrow" style="view-transition-name: log-${e.id}"><span class="badge lg">${TYPE_INFO[e.type].icon}</span>
+            <div class="info"><div class="t">${netDot(e.network)} ${esc(e.network)} · ${TYPE_INFO[e.type].unit(e.value)}</div>
+              <div class="d">${bits.join(" · ")}</div>
+              ${fast ? `<span class="flag">🔥 Burned fast: lasted ${L}d, usually ${med}d</span>` : ""}</div>
+            <div class="amt">${naira(e.cost)}</div>
+            <button class="x" data-del="${e.id}" data-kind="r" aria-label="Delete">✕</button></div>`;
+        }).join("");
+      }
+
+      let buttons = "";
+      if (items.length > ui.logCount) buttons += `<button class="push sm dark" type="button" data-more="1"><span class="badge">⌄</span>Show more</button>`;
+      if (!store.recharges.length && !store.checkins.length) buttons += `<button class="push sm" type="button" data-sample="1"><span class="badge">✨</span>Try sample data</button>`;
+      else buttons += `<button class="push sm dark" type="button" data-csv="1"><span class="badge">⬇️</span>Download CSV</button>
+                       <button class="push sm dark" type="button" data-clear="1"><span class="badge">🗑️</span>Clear all</button>`;
+      $("logActions").innerHTML = buttons;
+    }
+
+    $("logChips").addEventListener("click", (e) => {
+      const c = e.target.closest(".chip");
+      if (c) { ui.logFilter = c.dataset.f; ui.logCount = 8; withTransition(renderLog); }
+    });
+
+    // ---------- 8. The recharge form ----------
+    const dlgR = $("dlgRecharge"), dlgC = $("dlgCheck");
+    const COST_QUICK = [200, 500, 1000, 2000, 5000];
+    const SIZE_QUICK = [0.5, 1, 2, 5, 10];
+
+    // Quick-pick chips: tapping one fills the box next to it
+    function drawQuick(boxId, inputId, values, label) {
+      const current = Number($(inputId).value);
+      $(boxId).innerHTML = values.map((v) =>
+        `<button class="chip plain ${v === current ? "on" : ""}" type="button" data-q="${v}">${label(v)}</button>`).join("");
+    }
+    function bindQuick(boxId, inputId, values, label) {
+      $(boxId).addEventListener("click", (e) => {
+        const b = e.target.closest("[data-q]");
+        if (!b) return;
+        $(inputId).value = b.dataset.q;
+        drawQuick(boxId, inputId, values, label);
+        updateHint();
+      });
+      $(inputId).addEventListener("input", () => { drawQuick(boxId, inputId, values, label); updateHint(); });
+    }
+    const costLabel = (v) => naira(v), sizeLabel = (v) => v + " GB";
+    bindQuick("costChips", "fCost", COST_QUICK, costLabel);
+    bindQuick("sizeChips", "fSize", SIZE_QUICK, sizeLabel);
+
+    function setRType(t) {
+      ui.rType = t;
+      document.querySelectorAll("#typeChips .chip").forEach((c) => c.classList.toggle("on", c.dataset.t === t));
+      $("sizeBlock").classList.toggle("hide", t !== "data");
+      $("validWrap").classList.toggle("hide", t !== "data");
+      updateHint();
+    }
+    function drawNetChips() {
+      $("netChips").innerHTML = NETWORKS.map((n) =>
+        `<button class="chip ${n.name === ui.rNet ? "on" : ""}" type="button" data-n="${n.name}"><span class="badge">${n.dot}</span>${n.name}</button>`).join("");
+    }
+    function updateHint() {
+      const cost = Number($("fCost").value) || 0, size = Number($("fSize").value) || 0;
+      $("hintR").textContent = ui.rType === "data" && cost > 0 && size > 0 ? `That is ${naira(cost / size)} per GB.` : "";
+    }
+    function openRecharge(type) {
+      ["fCost", "fSize", "fValid", "fNote"].forEach((id) => { $(id).value = ""; $(id).classList.remove("bad"); });
+      $("fDate").value = today();
+      dlgR.querySelector("details").open = false;
+      drawNetChips();
+      drawQuick("costChips", "fCost", COST_QUICK, costLabel);
+      drawQuick("sizeChips", "fSize", SIZE_QUICK, sizeLabel);
+      setRType(type ?? ui.wallet);
+      dlgR.showModal();
+    }
+
+    $("typeChips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) setRType(b.dataset.t); });
+    $("netChips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) { ui.rNet = b.dataset.n; drawNetChips(); } });
+
+    const flagBad = (ids) => { ids.forEach((id) => $(id).classList.add("bad")); setTimeout(() => ids.forEach((id) => $(id).classList.remove("bad")), 600); };
+
+    $("formRecharge").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const cost = Number($("fCost").value), size = Number($("fSize").value);
+      const bad = [];
+      if (!(cost > 0)) bad.push("fCost");
+      if (ui.rType === "data" && !(size > 0)) bad.push("fSize");
+      if (bad.length) return flagBad(bad);
+
+      store.recharges.push({
+        id: uid(), type: ui.rType, network: ui.rNet, cost,
+        value: ui.rType === "data" ? size : cost,
+        validity: ui.rType === "data" ? Number($("fValid").value) || 0 : 0,
+        date: $("fDate").value || today(), note: $("fNote").value.trim(), ts: Date.now()
+      });
+      ui.wallet = ui.rType;             // show the wallet you just topped up
+      dlgR.close();
+      withTransition(render);
+      toast("Recharge saved ✓");
+    });
+
+    // ---------- 9. The balance check form ----------
+    function setCType(t) {
+      ui.cType = t;
+      document.querySelectorAll("#checkChips .chip").forEach((c) => c.classList.toggle("on", c.dataset.t === t));
+      $("balLabel").textContent = t === "airtime" ? "2 · How much airtime is left? (₦)" : "2 · How much data is left? (GB)";
+    }
+    function openCheck(type) {
+      $("fBal").value = ""; $("fBal").classList.remove("bad");
+      $("fCDate").value = today();
+      dlgC.querySelector("details").open = false;
+      setCType(type);
+      dlgC.showModal();
+    }
+    $("checkChips").addEventListener("click", (e) => { const b = e.target.closest(".chip"); if (b) setCType(b.dataset.t); });
+    $("formCheck").addEventListener("submit", (e) => {
+      e.preventDefault();
+      const bal = $("fBal").value === "" ? NaN : Number($("fBal").value);
+      if (!(bal >= 0)) return flagBad(["fBal"]);
+      store.checkins.push({ id: uid(), type: ui.cType, balance: bal, date: $("fCDate").value || today(), ts: Date.now() });
+      ui.wallet = ui.cType;
+      dlgC.close();
+      withTransition(render);
+      toast("Balance saved ✓");
+    });
+
+    // Tapping the dark area above a sheet closes it
+    [dlgR, dlgC].forEach((d) => d.addEventListener("click", (e) => { if (e.target === d) d.close(); }));
+
+    // ---------- 10. Buttons ----------
+    $("btnRecharge").addEventListener("click", () => openRecharge());
+    $("btnCheck").addEventListener("click", () => openCheck(ui.wallet));
+
+    $("budgetSave").addEventListener("click", () => {
+      store.budget = Math.max(0, Number($("budgetIn").value) || 0);
+      renderBudget(); renderHome(); save();
+      toast(store.budget ? "Budget set ✓" : "Budget cleared");
+    });
+
+    $("leagueChips").addEventListener("click", (e) => {
+      const b = e.target.closest(".chip");
+      if (!b) return;
+      ui.league = b.dataset.m;
+      withTransition(renderLeague);
+    });
+
+    $("log").addEventListener("click", (e) => {
+      const b = e.target.closest("[data-del]");
+      if (!b) return;
+      const listName = b.dataset.kind === "c" ? "checkins" : "recharges";
+      const i = store[listName].findIndex((x) => x.id === b.dataset.del);
+      if (i < 0) return;
+      lastDeleted = { listName, item: store[listName].splice(i, 1)[0] };
+      withTransition(render);
+      toast("Entry deleted", "Undo", () => {
+        if (lastDeleted) { store[lastDeleted.listName].push(lastDeleted.item); lastDeleted = null; withTransition(render); }
+      });
+    });
+
+    $("logActions").addEventListener("click", (e) => {
+      const b = e.target.closest("button");
+      if (!b) return;
+      if (b.dataset.more) { ui.logCount += 8; withTransition(renderLog); }
+      if (b.dataset.csv) exportCsv();
+      if (b.dataset.clear && confirm("Delete ALL logged data? This cannot be undone.")) {
+        store.recharges = []; store.checkins = []; withTransition(render);
+      }
+    });
+
+    // One listener handles every "Try sample data" button on any screen
+    document.addEventListener("click", (e) => { if (e.target.closest("[data-sample]")) loadSample(); });
+
+    // ---------- 11. Sample data and CSV ----------
+    function loadSample() {
+      const base = today();
+      const R = (ago, type, network, cost, value, validity, note = "Sample") =>
+        ({ id: uid(), type, network, cost, value, validity, date: addDays(base, -ago), note, ts: Date.now() - ago });
+      // Made-up examples so you can see how everything works. The 2-day gap is a deliberate "fast burn".
+      store.recharges.push(
+        R(40, "airtime", "MTN", 1000, 1000, 0), R(33, "airtime", "MTN", 1000, 1000, 0), R(27, "airtime", "Glo", 500, 500, 0),
+        R(25, "airtime", "MTN", 500, 500, 0), R(18, "airtime", "MTN", 1000, 1000, 0), R(11, "airtime", "MTN", 1000, 1000, 0),
+        R(4, "airtime", "MTN", 1000, 1000, 0),
+        R(36, "data", "MTN", 1500, 2, 30), R(22, "data", "Airtel", 1000, 1.5, 14), R(9, "data", "MTN", 2000, 3, 30)
+      );
+      store.checkins.push(
+        { id: uid(), type: "airtime", balance: 640, date: addDays(base, -2), ts: Date.now() },
+        { id: uid(), type: "data", balance: 2.4, date: addDays(base, -1), ts: Date.now() }
+      );
+      withTransition(render);
+      toast("Sample data added");
+    }
+
+    function exportCsv() {
+      const q = (s) => `"${String(s).replace(/"/g, '""')}"`;
+      const rows = ["Date,Type,Network,Paid,Value (₦ or GB),Valid days,Note",
+        ...store.recharges.toSorted(byDate).map((r) => [r.date, r.type, r.network, r.cost, r.value, r.validity || "", q(r.note || "")].join(","))];
+      const a = Object.assign(document.createElement("a"), { href: URL.createObjectURL(new Blob([rows.join("\n")], { type: "text/csv" })), download: "burnclock.csv" });
+      a.click();
+      toast("CSV downloaded");
+    }
+
+    // ---------- 12. Start ----------
+    load();
+    render();
+    staggerIn("#v-home > *");
+  </script>
+</body>
+</html>
